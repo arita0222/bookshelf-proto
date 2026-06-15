@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>夜の本棚 — プロトタイプ</title>
+<meta name="description" content="リアル書店の体験をスマホで再現する本棚UIのプロトタイプ">
+<style>
+:root{
+  --ink:#2a211b; --paper:#f4ecd8; --paper2:#ece0c4; --glow:#f4c97a;
+  --wood:#5a4434; --wood-d:#3a2a1d; --wood-l:#7a5d40; --gold:#d8b988;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{
+  font-family:"Hiragino Mincho ProN","Yu Mincho",serif;
+  background:radial-gradient(130% 90% at 50% -15%, #3c2d23 0%, #241813 52%, #120b08 100%);
+  color:var(--paper);overflow:hidden;
+}
+header{position:fixed;top:0;left:0;right:0;z-index:60;display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;background:linear-gradient(#120b08 35%, rgba(18,11,8,0))}
+.brand{font-size:18px;letter-spacing:.2em;font-weight:600;color:#f4ecd8}
+.brand small{display:block;font-size:9px;letter-spacing:.32em;color:#a98c60;margin-top:3px}
+.modeswitch{display:flex;gap:4px;background:rgba(0,0,0,.32);border-radius:30px;padding:4px}
+.modeswitch button{font-family:inherit;font-size:12px;letter-spacing:.12em;border:0;background:transparent;color:#a98c60;padding:6px 13px;border-radius:24px;transition:.25s}
+.modeswitch button.on{background:var(--glow);color:#241813;font-weight:600}
+#stage{position:absolute;inset:0;padding-top:78px;padding-bottom:26px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.shelf-label{display:flex;align-items:center;gap:10px;padding:20px 24px 8px;font-size:13px;letter-spacing:.24em;color:var(--gold)}
+.shelf-label::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#7a5c3c,transparent)}
+.shelf-wrap{position:relative;margin:0 10px 34px}
+.shelf-wrap::before{content:"";position:absolute;left:6px;right:6px;top:-6px;bottom:8px;background:repeating-linear-gradient(90deg, rgba(0,0,0,.06) 0 2px, transparent 2px 26px),linear-gradient(180deg,#4a3526,#39271b);border-radius:4px;box-shadow:inset 0 14px 26px rgba(0,0,0,.55), inset 0 -6px 12px rgba(0,0,0,.4)}
+.shelf{position:relative;display:flex;align-items:flex-end;gap:6px;padding:10px 18px 0;min-height:206px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.shelf::-webkit-scrollbar{display:none}.shelf{scrollbar-width:none}
+.shelf::before{content:"";position:absolute;left:0;right:0;bottom:-2px;height:24px;z-index:5;background:linear-gradient(#86663f,#5a4128 55%,#33230f);border-radius:3px;box-shadow:0 12px 22px -6px rgba(15,9,4,.7), inset 0 2px 0 #9c7a4c, inset 0 -3px 6px rgba(0,0,0,.5)}
+.shelf::after{content:"";position:absolute;left:0;right:0;bottom:22px;height:10px;z-index:4;background:linear-gradient(rgba(0,0,0,.45),transparent)}
+.book{position:relative;flex:0 0 auto;z-index:6;border-radius:1px 3px 3px 1px;cursor:pointer;scroll-snap-align:center;transform-origin:bottom center;transition:transform .3s cubic-bezier(.34,1.1,.5,1), filter .3s;box-shadow:inset -4px 0 7px rgba(0,0,0,.4),inset 4px 0 5px rgba(255,255,255,.13),2px 5px 9px rgba(0,0,0,.45)}
+.book .spine-text{position:absolute;inset:0;writing-mode:vertical-rl;display:flex;align-items:center;justify-content:center;padding:13px 0;font-size:12px;letter-spacing:.06em;line-height:1.3;color:rgba(255,255,255,.93);text-shadow:0 1px 2px rgba(0,0,0,.55);overflow:hidden}
+.book .cap{position:absolute;left:0;right:0;top:0;height:10px;background:rgba(0,0,0,.2)}
+.book .cap.bottom{top:auto;bottom:0;height:8px;background:rgba(0,0,0,.32)}
+.book::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,rgba(255,255,255,.08),transparent 30%,transparent 70%,rgba(0,0,0,.12));pointer-events:none}
+.book:hover{transform:translateY(-7px)}
+.book.peek{transform:translateY(-16px);filter:drop-shadow(0 14px 18px rgba(0,0,0,.5))}
+.book.gone{opacity:0;transition:opacity .12s}
+
+/* ===== 引き抜き演出ステージ ===== */
+.fly-stage{position:fixed;inset:0;z-index:55;pointer-events:none;perspective:1600px;perspective-origin:50% 42%;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .25s}
+.fly-stage.on{opacity:1}
+.fly-stage::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 44%, rgba(0,0,0,.55), rgba(6,4,2,.86))}
+
+/* 本オブジェクト（背表紙・表紙・左右ページを内包） */
+.tome{position:absolute;transform-style:preserve-3d;will-change:transform}
+/* 本のヒンジ（中央の綴じ）。左右の半分がここを軸に開く */
+.tome .half{position:absolute;top:0;height:100%;width:50%;transform-style:preserve-3d;backface-visibility:hidden}
+.tome .half.left{left:0;transform-origin:right center}
+.tome .half.right{right:0;transform-origin:left center}
+/* 表紙の面（閉じてる時に見える表側） */
+.face-cover{position:absolute;inset:0;border-radius:3px;background-size:cover;background-position:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18), 0 10px 30px rgba(0,0,0,.5);backface-visibility:hidden}
+.face-cover.l{border-radius:3px 0 0 3px;box-shadow:inset -8px 0 14px rgba(0,0,0,.28)}
+.face-cover.r{border-radius:0 3px 3px 0;box-shadow:inset 8px 0 14px rgba(0,0,0,.28)}
+.face-cover .cv-ttl{position:absolute;left:0;right:0;bottom:0;padding:12px;background:linear-gradient(transparent,rgba(0,0,0,.62));color:#fff}
+.face-cover .cv-ttl b{display:block;font-size:14px;letter-spacing:.03em}
+.face-cover .cv-ttl span{font-size:9px;opacity:.85;letter-spacing:.1em}
+/* 中身（開いた時に見える紙の面）裏側に配置 */
+.face-page{position:absolute;inset:0;border-radius:3px;background:var(--paper);transform:rotateY(180deg);backface-visibility:hidden;display:flex;align-items:center;justify-content:center;color:#b09a76;font-size:11px;letter-spacing:.18em;box-shadow:inset 0 0 30px rgba(0,0,0,.08)}
+.face-page.l{border-radius:3px 0 0 3px;background-image:linear-gradient(-90deg,rgba(0,0,0,.1),transparent 14%)}
+.face-page.r{border-radius:0 3px 3px 0;background-image:linear-gradient(90deg,rgba(0,0,0,.1),transparent 14%)}
+
+/* ===== 詳細カード ===== */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(8,5,3,.8);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:.3s;display:flex;align-items:center;justify-content:center;padding:22px}
+.scrim.show{opacity:1;pointer-events:auto}
+.bookcard{width:100%;max-width:344px;background:var(--paper);color:var(--ink);border-radius:7px;overflow:hidden;transform:scale(.97);transition:.3s cubic-bezier(.2,1,.4,1);box-shadow:0 34px 64px -16px rgba(0,0,0,.72);max-height:88vh;display:flex;flex-direction:column}
+.scrim.show .bookcard{transform:none}
+.cover{height:236px;position:relative;flex:0 0 auto;display:flex;align-items:flex-end;background-size:cover;background-position:center}
+.cover .ttl{padding:18px 20px;width:100%;background:linear-gradient(transparent, rgba(0,0,0,.72));color:#fff}
+.cover .ttl h2{font-size:20px;letter-spacing:.04em}
+.cover .ttl p{font-size:12px;opacity:.85;margin-top:5px;letter-spacing:.1em}
+.cardbody{padding:18px 20px 22px;overflow-y:auto}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.tag{font-size:11px;letter-spacing:.08em;background:var(--paper2);color:#6a513a;padding:4px 10px;border-radius:20px}
+.price{font-size:24px;font-weight:600;letter-spacing:.04em;margin:4px 0 8px}
+.price small{font-size:12px;font-weight:400;color:#8a7458}
+.desc{font-size:13.5px;line-height:1.9;color:#4a3c2e}
+.read{margin:16px 0 6px;width:100%;border:1px solid #cbb894;background:transparent;font-family:inherit;color:#6a513a;font-size:13px;letter-spacing:.14em;padding:12px;border-radius:5px;cursor:pointer}
+.buy{margin-top:10px;width:100%;border:0;font-family:inherit;background:var(--ink);color:var(--paper);font-size:15px;letter-spacing:.16em;padding:15px;border-radius:5px;cursor:pointer}
+.buy:active{transform:scale(.985)}
+.close{position:absolute;top:12px;right:12px;z-index:2;width:34px;height:34px;border-radius:50%;border:0;background:rgba(0,0,0,.42);color:#fff;font-size:18px;cursor:pointer}
+.reader{position:fixed;inset:0;z-index:70;background:rgba(10,7,4,.92);opacity:0;pointer-events:none;transition:.3s;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.reader.show{opacity:1;pointer-events:auto}
+.reader .rclose{position:absolute;top:16px;right:16px;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer}
+.spread{perspective:2000px;width:min(86vw,360px);height:min(64vh,460px);position:relative}
+.page{position:absolute;inset:0;background:var(--paper);border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#9a8568;font-size:13px;letter-spacing:.2em;box-shadow:0 18px 40px rgba(0,0,0,.5);transform-origin:left center;transform-style:preserve-3d;background-image:linear-gradient(90deg,rgba(0,0,0,.06),transparent 8%)}
+.page .pno{font-size:11px;color:#b6a17e;letter-spacing:.1em}
+.page.flipping{animation:flip .7s cubic-bezier(.4,.1,.3,1) forwards}
+@keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(-168deg)}}
+.rnav{margin-top:18px;display:flex;gap:14px;align-items:center}
+.rnav button{font-family:inherit;border:1px solid rgba(255,255,255,.3);background:transparent;color:#e8d9bb;padding:9px 18px;border-radius:24px;font-size:13px;letter-spacing:.12em;cursor:pointer}
+.rhint{margin-top:10px;font-size:10px;letter-spacing:.18em;color:#8a7050}
+.hint{position:fixed;bottom:14px;left:0;right:0;text-align:center;font-size:11px;letter-spacing:.18em;color:#7c6044;z-index:30;pointer-events:none}
+.flag{position:fixed;top:66px;left:0;right:0;text-align:center;font-size:10px;letter-spacing:.15em;color:#6b5238;z-index:30;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.book,.tome,.half{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">夜の本棚<small>YORU NO HONDANA</small></div>
+  <div class="modeswitch">
+    <button class="on" data-mode="theme">テーマ別</button>
+    <button data-mode="genre">ジャンル別</button>
+  </div>
+</header>
+<div class="flag">プロトタイプ（イメージ確認用・購入機能は非接続）</div>
+<div id="stage"></div>
+<div class="hint">背表紙をタップして本を引き抜く</div>
+
+<div class="fly-stage" id="flyStage"></div>
+<div class="scrim" id="scrim"><div class="bookcard" id="bookcard"></div></div>
+
+<div class="reader" id="reader">
+  <button class="rclose" onclick="closeReader()">×</button>
+  <div class="spread" id="spread"></div>
+  <div class="rnav"><button onclick="flipPage()">ページをめくる ▸</button></div>
+  <div class="rhint">タップでページがめくれます</div>
+</div>
+
+<script>
+const palette=["#7a4a3a","#3e5161","#6a6233","#7d4159","#445c4a","#8a6a3a","#523f5e","#2f4858","#86432e","#5c5346"];
+function book(i,title,author,price,fmt,pages,genre,theme,desc){
+  const h=fmt==="文庫"?150:fmt==="新書"?168:fmt==="四六判"?184:200;
+  const w=Math.min(46,Math.max(22,Math.round(pages/14)));
+  return {i,title,author,price,fmt,pages,genre,theme,desc,h,w,color:palette[i%palette.length]};
+}
+const BOOKS=[
+  book(0,"月あかりの読書会","三上 ひなた",1650,"四六判",288,"小説","夜に読みたい本","眠る前のひとときに開きたい、静けさをまとった連作短編。"),
+  book(1,"こどもと過ごす朝","大久保 えり",1540,"四六判",224,"子育て","子育ての助けになる本","完璧じゃなくていい。今日を少し楽にする小さな工夫集。"),
+  book(2,"珈琲と経営","谷口 達生",1980,"四六判",352,"ビジネス","仕事の合間に","一杯のコーヒーから始める、無理のない事業の育て方。"),
+  book(3,"星座の歴史","新書編集部",1100,"新書",210,"歴史","夜に読みたい本","空を見上げてきた人々の、数千年の物語をたどる。"),
+  book(4,"からだの整え方","健康ラボ",1430,"四六判",256,"健康","仕事の合間に","頑張らない健康習慣。今日からできる小さな一歩。"),
+  book(5,"ねむれない夜の絵本","イラスト工房",2200,"その他",96,"児童書","夜に読みたい本","大人のための絵本。ページをめくるたび、心がほどける。"),
+  book(6,"小さな庭の育て方","土と緑社",1760,"四六判",300,"健康","子育ての助けになる本","ベランダひと鉢から。暮らしに緑を迎える手引き。"),
+  book(7,"はじめての投資","谷口 達生",990,"文庫",198,"ビジネス","仕事の合間に","難しい言葉を使わない、いちばんやさしいお金の話。"),
+  book(8,"古都を歩く","旅編集室",1320,"新書",240,"歴史","夜に読みたい本","路地と石畳が語る、時間が止まったような街の記憶。"),
+  book(9,"こどもの言葉","大久保 えり",1430,"四六判",208,"子育て","子育ての助けになる本","あの一言の意味は？親子の会話が楽しくなる一冊。"),
+];
+const THEMES=["夜に読みたい本","子育ての助けになる本","仕事の合間に"];
+const GENRES=["小説","子育て","ビジネス","歴史","健康","児童書"];
+let mode="theme";
+const stage=document.getElementById("stage");
+function render(){
+  stage.innerHTML="";
+  const groups=mode==="theme"?THEMES:GENRES;
+  const key=mode==="theme"?"theme":"genre";
+  groups.forEach(g=>{
+    const items=BOOKS.filter(b=>b[key]===g);
+    if(!items.length)return;
+    const lbl=document.createElement("div");lbl.className="shelf-label";lbl.textContent=g;stage.appendChild(lbl);
+    const wrap=document.createElement("div");wrap.className="shelf-wrap";
+    const shelf=document.createElement("div");shelf.className="shelf";
+    items.forEach(b=>{
+      const el=document.createElement("div");el.className="book";
+      el.style.height=b.h+"px";el.style.width=b.w+"px";
+      el.style.background=`linear-gradient(90deg, rgba(0,0,0,.28), ${b.color} 16%, ${b.color} 84%, rgba(255,255,255,.12))`;
+      el.innerHTML=`<span class="cap"></span><span class="spine-text">${b.title}</span><span class="cap bottom"></span>`;
+      el.onclick=()=>pull(b,el);
+      shelf.appendChild(el);
+    });
+    wrap.appendChild(shelf);stage.appendChild(wrap);
+  });
+}
+
+const flyStage=document.getElementById("flyStage");
+const scrim=document.getElementById("scrim");
+const card=document.getElementById("bookcard");
+let busy=false;
+
+/* ====== 引き抜き → 奥に倒す → 中央で見開き ====== */
+function pull(b,el){
+  if(busy)return;busy=true;
+  el.classList.add("peek");                 // (1) 少し引き出す
+  const rect=el.getBoundingClientRect();
+  setTimeout(()=>{
+    el.classList.add("gone");
+    flyStage.classList.add("on");
+
+    // 表紙本のサイズ（閉じた状態）。判型比率で縦長に
+    const W=Math.min(220, window.innerWidth*0.56);
+    const H=W*1.4;
+    const cx=window.innerWidth/2, cy=window.innerHeight/2;
+    const startX=rect.left+rect.width/2-cx;
+    const startY=rect.top+rect.height/2-cy;
+
+    const tome=document.createElement("div");
+    tome.className="tome";
+    tome.style.width=W+"px";tome.style.height=H+"px";
+    const grad=`linear-gradient(135deg, ${b.color}, #241712)`;
+    // 左右半分。表側=表紙、裏側=ページ
+    tome.innerHTML=`
+      <div class="half left" id="hl">
+        <div class="face-cover l" style="background:${grad}"></div>
+        <div class="face-page l"><span>試し読み</span></div>
+      </div>
+      <div class="half right" id="hr">
+        <div class="face-cover r" style="background:${grad}">
+          <div class="cv-ttl"><b>${b.title}</b><span>${b.author}</span></div>
+        </div>
+        <div class="face-page r"><span>${b.title}</span></div>
+      </div>`;
+    flyStage.appendChild(tome);
+
+    // (2) 開始：棚の位置で背表紙が手前を向いた細い状態
+    tome.style.transition="none";
+    tome.style.transform=`translate(${startX}px,${startY}px) translateZ(0) rotateX(0deg) rotateY(-86deg) scale(.5)`;
+    tome.getBoundingClientRect();
+
+    // (2b) 引き抜いて中央へ。少し手前に起こしながら表紙を正面に
+    requestAnimationFrame(()=>{
+      tome.style.transition="transform .9s cubic-bezier(.3,.7,.3,1)";
+      tome.style.transform=`translate(0px,-10px) rotateX(8deg) rotateY(0deg) scale(1)`;
+    });
+
+    // (3) 奥側に倒す（寝かせる）：表紙を上に向けてテーブルに置くイメージ
+    setTimeout(()=>{
+      tome.style.transition="transform .8s cubic-bezier(.4,.1,.3,1)";
+      tome.style.transform=`translate(0px,0px) rotateX(62deg) rotateY(0deg) scale(1.02)`;
+    },950);
+
+    // (4) 中央から観音開き：左右の表紙が外側へ開く
+    setTimeout(()=>{
+      document.getElementById("hl").style.transition="transform 1s cubic-bezier(.45,.05,.25,1)";
+      document.getElementById("hr").style.transition="transform 1s cubic-bezier(.45,.05,.25,1)";
+      document.getElementById("hl").style.transform="rotateY(168deg)";
+      document.getElementById("hr").style.transform="rotateY(-168deg)";
+    },1700);
+
+    // (5) 開ききったら商品内容へ
+    setTimeout(()=>{
+      flyStage.classList.remove("on");
+      setTimeout(()=>{
+        flyStage.innerHTML="";
+        openCard(b);
+        el.classList.remove("peek","gone");
+        busy=false;
+      },240);
+    },2750);
+  },240);
+}
+
+let currentBook=null, pageNo=1;
+function openCard(b){
+  currentBook=b;
+  card.innerHTML=`
+    <button class="close" onclick="closeCard()">×</button>
+    <div class="cover" style="background:linear-gradient(135deg, ${b.color}, #2a1c14)">
+      <div class="ttl"><h2>${b.title}</h2><p>${b.author}</p></div>
+    </div>
+    <div class="cardbody">
+      <div class="meta">
+        <span class="tag">${b.genre}</span><span class="tag">${b.theme}</span>
+        <span class="tag">${b.fmt}</span><span class="tag">${b.pages}ページ</span>
+      </div>
+      <div class="price">¥${b.price.toLocaleString()}<small>（税込）</small></div>
+      <div class="desc">${b.desc}</div>
+      <button class="read" onclick="openReader()">📖 見開きで試し読み</button>
+      <button class="buy" onclick="alert('実装版ではShopifyのカートに追加されます')">カートに入れる</button>
+    </div>`;
+  scrim.classList.add("show");
+}
+function closeCard(){scrim.classList.remove("show")}
+scrim.onclick=e=>{if(e.target===scrim)closeCard()};
+
+const reader=document.getElementById("reader");
+const spread=document.getElementById("spread");
+function openReader(){pageNo=1;buildPages();reader.classList.add("show")}
+function buildPages(){
+  spread.innerHTML="";
+  const under=document.createElement("div");under.className="page";
+  under.innerHTML=`<span>試し読み ${pageNo+1}</span><span class="pno">${pageNo+1} / 8</span>`;
+  const top=document.createElement("div");top.className="page";top.id="topPage";
+  top.innerHTML=`<span>試し読み ${pageNo}</span><span class="pno">${pageNo} / 8</span>`;
+  spread.appendChild(under);spread.appendChild(top);
+}
+function flipPage(){
+  const top=document.getElementById("topPage");
+  if(!top)return;
+  top.classList.add("flipping");
+  setTimeout(()=>{pageNo+=2;if(pageNo>7)pageNo=1;buildPages();},680);
+}
+spread.addEventListener("click",flipPage);
+function closeReader(){reader.classList.remove("show")}
+
+document.querySelectorAll(".modeswitch button").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".modeswitch button").forEach(x=>x.classList.remove("on"));
+    btn.classList.add("on");mode=btn.dataset.mode;render();stage.scrollTo({top:0,behavior:"smooth"});
+  };
+});
+render();
+</script>
+</body>
+</html>
